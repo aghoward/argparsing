@@ -119,5 +119,11 @@ namespace ap {
 
                 return out.str();
             }
+
+            template <typename TModule>
+            void register_module()
+            {
+                m_container.registerModule<TModule>();
+            }
     };
 }
