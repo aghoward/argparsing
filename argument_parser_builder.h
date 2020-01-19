@@ -10,6 +10,14 @@
 #include "cdif/cdif.h"
 
 namespace ap {
+    namespace impl {
+        template <typename T>
+        std::function<T(std::string)> default_conversion_factory(const cdif::Container& ctx)
+        {
+            return ctx.resolve<std::function<T(std::string)>>();
+        }
+    }
+
     template <typename TArgs>
     class ArgumentParserBuilder
     {
@@ -17,29 +25,33 @@ namespace ap {
             std::vector<Argument<TArgs>> m_optional_args;
             std::vector<Argument<TArgs>> m_positional_args;
 
-            template <typename TMember>
-            void add_parameter(
+            template <typename TMember, typename TFactory>
+            auto add_parameter(
                 std::vector<Argument<TArgs>>& arg_list,
                 const std::string& name,
                 const std::vector<std::string>& switches,
                 const std::string& description,
                 bool hasArgument,
                 TMember TArgs::*member,
-                TMember defaultValue)
+                TMember defaultValue,
+                TFactory&& conversion_factory)
+            -> std::enable_if_t<std::is_convertible_v<
+                decltype(std::declval<TFactory>()(std::declval<cdif::Container>())(std::declval<std::string>())),
+                TMember>>
             {
                 arg_list.emplace_back(
                     name,
                     switches,
                     description,
                     hasArgument,
-                    [defaultValue, member]
+                    [defaultValue, member, conversion_factory]
                     (const cdif::Container& ctx, TArgs& args, const std::string& input)
                     {
                         if constexpr (std::is_same_v<TMember, bool>)
                             args.*member = input.empty() ? defaultValue : !defaultValue;
                         else
                         {
-                            auto conversion = ctx.resolve<std::function<TMember (std::string)>>();
+                            auto conversion = conversion_factory(ctx);
                             args.*member = input.empty() ? defaultValue : conversion(input);
                         }
                     });
@@ -53,13 +65,18 @@ namespace ap {
             {
             }
 
-            template <typename TMember>
-            ArgumentParserBuilder<TArgs>& add_optional(
+            template <typename TMember, typename TFactory>
+            auto add_optional(
                 const std::string& name,
                 TMember TArgs::*member,
                 TMember defaultValue,
                 const std::vector<std::string>& switches,
-                const std::string& description)
+                const std::string& description,
+                TFactory&& conversion_factory)
+            -> std::enable_if_t<std::is_convertible_v<
+                decltype(std::declval<TFactory>()(std::declval<cdif::Container>())(std::declval<std::string>())),
+                TMember>,
+            ArgumentParserBuilder<TArgs>&>
             {
                 add_parameter(
                     m_optional_args,
@@ -68,7 +85,44 @@ namespace ap {
                     description,
                     !std::is_same_v<TMember, bool>,
                     member,
-                    defaultValue);
+                    defaultValue,
+                    conversion_factory);
+
+                return *this;
+            }
+
+            template <typename TMember>
+            ArgumentParserBuilder<TArgs>& add_optional(
+                const std::string& name,
+                TMember TArgs::*member,
+                TMember defaultValue,
+                const std::vector<std::string>& switches,
+                const std::string& description)
+            {
+                return add_optional(name, member, defaultValue, switches, description, impl::default_conversion_factory<TMember>);
+            }
+
+            template <typename TMember, typename TFactory>
+            auto add_positional(
+                const std::string& name,
+                TMember TArgs::*member,
+                TMember defaultValue,
+                const std::string& description,
+                TFactory&& conversion_factory)
+            -> std::enable_if_t<std::is_convertible_v<
+                decltype(std::declval<TFactory>()(std::declval<cdif::Container>())(std::declval<std::string>())),
+                TMember>,
+            ArgumentParserBuilder<TArgs>&>
+            {
+                add_parameter(
+                    m_positional_args,
+                    name,
+                    {},
+                    description,
+                    false,
+                    member,
+                    defaultValue,
+                    conversion_factory);
 
                 return *this;
             }
@@ -80,16 +134,7 @@ namespace ap {
                 TMember defaultValue,
                 const std::string& description)
             {
-                add_parameter(
-                    m_positional_args,
-                    name,
-                    {},
-                    description,
-                    false,
-                    member,
-                    defaultValue);
-
-                return *this;
+                return add_positional(name, member, defaultValue, description, impl::default_conversion_factory<TMember>);
             }
 
             ArgumentParser<TArgs> build() const
