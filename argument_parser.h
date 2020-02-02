@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "argument.h"
+#include "errors.h"
 #include "primitives_module.h"
 #include "cdif/cdif.h"
+#include "either/either.h"
 
 namespace ap {
     template <typename TArgs>
@@ -18,73 +20,93 @@ namespace ap {
     {
         private:
             cdif::Container m_container;
-            std::vector<Argument<TArgs>> m_optional_args;
-            std::vector<Argument<TArgs>> m_positional_args;
+            std::vector<Argument<TArgs>> m_arguments;
 
-            std::optional<Argument<TArgs>> get_matching_optional(const std::string& arg)
+            auto get_matching_optional(const std::string& arg) ->
+                either<decltype(std::declval<std::vector<Argument<TArgs>>>().begin()), ParsingError>
             {
                 auto iter = std::find_if(
-                    m_optional_args.begin(),
-                    m_optional_args.end(),
+                    m_arguments.begin(),
+                    m_arguments.end(),
                     [&arg] (const auto& argument)
                     {
-                        return std::any_of(
+                        return argument.is_optional() && std::any_of(
                             argument.switches.begin(),
                             argument.switches.end(),
                             [&arg] (auto& item) { return item == arg; });
                     });
 
-                if (iter == m_optional_args.end())
-                    return {};
+                if (iter == m_arguments.end())
+                    return ParsingError::UnknownArgument;
 
                 iter->consumed = true;
-                return *iter;
+                return iter;
             }
 
-            std::optional<TArgs> parse_optional_args(TArgs& args, const char* argv[], int argc)
+            auto get_next_positional() ->
+                either<decltype(std::declval<std::vector<Argument<TArgs>>>().begin()), ParsingError>
             {
-                std::size_t consumed_positional_args = 0;
+                auto iter = std::find_if(
+                    m_arguments.begin(),
+                    m_arguments.end(),
+                    [] (const auto& argument)
+                    {
+                        return !argument.is_optional() && !argument.consumed;
+                    });
 
+                if (iter == m_arguments.end())
+                    return ParsingError::TooManyPositionalArguments;
+
+                iter->consumed = true;
+                return iter;
+            }
+
+            auto get_matching_arg(const std::string& argument) ->
+                either<decltype(std::declval<std::vector<Argument<TArgs>>>().begin()), ParsingError>
+            {
+                return get_matching_optional(argument)
+                    .foldSecond([&] (auto&&) { return get_next_positional(); });
+            }
+
+            either<TArgs, ParsingError> parse_args(TArgs& args, const char* argv[], int argc)
+            {
                 for (auto i = 1; i < argc; i++)
                 {
-                    auto optional_arg = get_matching_optional(argv[i]);
+                    auto error = get_matching_arg(argv[i]).match(
+                        [&] (const auto& argument) -> std::optional<ParsingError>
+                        {
+                            if (argument->has_argument && i >= argc - 1)
+                                return ParsingError::MissingValueForArgument;
+                            auto arg = argument->has_argument ? argv[++i] : argv[i];
+                            argument->parser(m_container, args, arg);
 
-                    if (optional_arg)
-                    {
-                        if (optional_arg.value().has_argument && i >= argc - 1)
                             return {};
-                        auto arg = optional_arg.value().has_argument ? argv[++i] : argv[i];
-                        optional_arg.value().parser(m_container, args, arg);
-                    } else {
-                        if (consumed_positional_args >= m_positional_args.size())
-                            return {};
-                        m_positional_args[consumed_positional_args++]
-                            .parser(m_container, args, argv[i]);
-                    }
+                        },
+                        [] (auto&& error) -> std::optional<ParsingError>
+                        {
+                            return error;
+                        });
+                    if (error)
+                        return error.value();
                 }
 
-                if (consumed_positional_args != m_positional_args.size())
-                    return {};
-
-                return args;
-            }
-
-            std::optional<TArgs> parse_positional_args(TArgs& args)
-            {
-                for (auto& item : m_optional_args)
-                {
-                    if (!item.consumed)
-                        item.parser(m_container, args, "");
-                }
+                if (!std::all_of(
+                        m_arguments.begin(),
+                        m_arguments.end(),
+                        [] (const auto& pa) {
+                            if (!pa.is_optional())
+                                return pa.consumed;
+                            return true;
+                        }))
+                    return ParsingError::MissingPositionalArgument;
 
                 return args;
             }
 
         public:
-            ArgumentParser(const std::vector<Argument<TArgs>>& optional_args, const std::vector<Argument<TArgs>>& positional_args)
+            ArgumentParser(const std::vector<Argument<TArgs>>& arguments)
                 : m_container(),
-                  m_optional_args(optional_args),
-                  m_positional_args(positional_args)
+                  m_arguments(arguments)
             {
                 m_container.registerModule<PrimitivesModule>();
             }
@@ -97,13 +119,10 @@ namespace ap {
             ArgumentParser& operator=(const ArgumentParser&) = default;
             ArgumentParser& operator=(ArgumentParser&&) = default;
 
-            std::optional<TArgs> parse(int argc, const char* argv[])
+            either<TArgs, ParsingError> parse(int argc, const char* argv[])
             {
                 TArgs args;
-                auto parsedOptionals = parse_optional_args(args, argv, argc);
-                if (!parsedOptionals)
-                    return {};
-                return parse_positional_args(args);
+                return parse_args(args, argv, argc);
             }
 
             std::string usage(const std::string& program_name) const
@@ -111,13 +130,31 @@ namespace ap {
                 std::stringstream out;
 
                 out << "Usage: " << program_name << " ";
-                for (auto& item : m_optional_args)
-                    out << "[" << item << "] ";
-
-                for (auto& item: m_positional_args)
-                    out << "<" << item.name << "> ";
+                for (auto& item : m_arguments)
+                {
+                    if (item.is_optional())
+                        out << "[" << item << "] ";
+                    else
+                        out << "<" << item.name << "> ";
+                }
 
                 return out.str();
+            }
+
+            std::string get_error_message(const ParsingError& error) const
+            {
+                using namespace std::string_literals;
+
+                if (error == ParsingError::UnknownArgument)
+                    return "Unknown argument provided"s;
+                if (error == ParsingError::MissingPositionalArgument)
+                    return "Too few positional arguments provided"s;
+                if (error == ParsingError::TooManyPositionalArguments)
+                    return "Too many positional arguments provided"s;
+                if (error == ParsingError::MissingValueForArgument)
+                    return "Argument missing required value"s;
+
+                return "Unknown error"s;
             }
 
             template <typename TModule>
