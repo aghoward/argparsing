@@ -68,6 +68,15 @@ namespace ap {
                     .foldSecond([&] (auto&&) { return get_next_positional(); });
             }
 
+            void fill_default_values(TArgs& args) const
+            {
+                using namespace std::string_literals;
+
+                for (const auto& arg : m_arguments)
+                    if (!arg.consumed && arg.is_optional())
+                        arg.parser(m_container, args, ""s);
+            }
+
             either<TArgs, ParsingError> parse_args(TArgs& args, const char* argv[], int argc)
             {
                 for (auto i = 1; i < argc; i++)
@@ -99,6 +108,8 @@ namespace ap {
                             return true;
                         }))
                     return ParsingError::MissingPositionalArgument;
+
+                fill_default_values(args);
 
                 return args;
             }
