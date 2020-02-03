@@ -33,6 +33,11 @@ namespace ap {
                 consumed(false)
         {
         }
+
+        bool is_optional() const
+        {
+            return has_argument || !switches.empty();
+        }
     };
 
     template <typename TIter>

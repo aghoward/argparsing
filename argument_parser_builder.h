@@ -22,12 +22,10 @@ namespace ap {
     class ArgumentParserBuilder
     {
         private:
-            std::vector<Argument<TArgs>> m_optional_args;
-            std::vector<Argument<TArgs>> m_positional_args;
+            std::vector<Argument<TArgs>> m_args;
 
             template <typename TMember, typename TFactory>
             auto add_parameter(
-                std::vector<Argument<TArgs>>& arg_list,
                 const std::string& name,
                 const std::vector<std::string>& switches,
                 const std::string& description,
@@ -39,7 +37,7 @@ namespace ap {
                 decltype(std::declval<TFactory>()(std::declval<cdif::Container>())(std::declval<std::string>())),
                 TMember>>
             {
-                arg_list.emplace_back(
+                m_args.emplace_back(
                     name,
                     switches,
                     description,
@@ -60,8 +58,7 @@ namespace ap {
 
         public:
             ArgumentParserBuilder()
-                : m_optional_args(),
-                  m_positional_args()
+                : m_args()
             {
             }
 
@@ -79,7 +76,6 @@ namespace ap {
             ArgumentParserBuilder<TArgs>&>
             {
                 add_parameter(
-                    m_optional_args,
                     name,
                     switches,
                     description,
@@ -115,7 +111,6 @@ namespace ap {
             ArgumentParserBuilder<TArgs>&>
             {
                 add_parameter(
-                    m_positional_args,
                     name,
                     {},
                     description,
@@ -139,7 +134,7 @@ namespace ap {
 
             ArgumentParser<TArgs> build() const
             {
-                return ArgumentParser<TArgs>(m_optional_args, m_positional_args);
+                return ArgumentParser<TArgs>(m_args);
             }
     };
 }
