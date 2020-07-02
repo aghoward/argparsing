@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <iomanip>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -114,6 +115,14 @@ namespace ap {
                 return args;
             }
 
+            uint32_t get_widest_argument_length() const {
+                auto argument_lengths = std::vector<uint32_t>(m_arguments.size());
+                std::transform(m_arguments.begin(), m_arguments.end(), argument_lengths.begin(),
+                    [] (const auto& arg) { return ap::to_string(arg).size(); });
+                std::sort(argument_lengths.begin(), argument_lengths.end());
+                return *argument_lengths.rbegin();
+            }
+
         public:
             ArgumentParser(const std::vector<Argument<TArgs>>& arguments)
                 : m_container(),
@@ -147,6 +156,27 @@ namespace ap {
                         out << "[" << item << "] ";
                     else
                         out << "<" << item.name << "> ";
+                }
+
+                return out.str();
+            }
+
+            std::string help(const std::string& program_name) const
+            {
+                std::stringstream out;
+
+                out << usage(program_name) << std::endl << std::endl;
+
+                auto first_column_width = get_widest_argument_length() + 2;
+                auto second_column_width = 120 - first_column_width - 8;
+
+                for (const auto& arg : m_arguments) {
+                    out <<
+                        std::setw(4) << std::left << " " <<
+                        std::setw(first_column_width) << std::left << ap::to_string(arg) <<
+                        std::endl << std::setw(first_column_width + 4) << std::left << " " <<
+                        std::setw(second_column_width) << std::left << arg.description <<
+                        std::endl;
                 }
 
                 return out.str();
