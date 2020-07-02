@@ -1,8 +1,9 @@
 #pragma once
 
+#include <functional>
+#include <sstream>
 #include <string>
 #include <vector>
-#include <functional>
 
 #include "cdif/cdif.h"
 
@@ -51,13 +52,20 @@ namespace ap {
     }
 
     template <typename T>
-    std::ostream& operator<<(std::ostream& out, const Argument<T>& arg)
+    std::string to_string(const Argument<T>& arg)
     {
+        std::stringstream ss;
         if (!arg.switches.empty())
-            join(out, arg.switches.begin(), arg.switches.end(), "|");
+            join(ss, arg.switches.begin(), arg.switches.end(), "|");
 
         if (arg.has_argument)
-            out << " <" << arg.name << ">";
-        return out;
+            ss << " <" << arg.name << ">";
+        return ss.str();
+    }
+
+    template <typename T>
+    std::ostream& operator<<(std::ostream& out, const Argument<T>& arg)
+    {
+        return out << to_string(arg);
     }
 }
