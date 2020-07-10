@@ -18,20 +18,23 @@ namespace ap {
         std::function<void (const cdif::Container&, TArgs&, const std::string&)> parser;
 
         bool consumed;
+        bool freestanding;
 
         Argument(
             const std::string& _name,
             const std::vector<std::string>& _switches,
             const std::string& _description,
             bool _has_argument,
-            std::function<void (const cdif::Container&, TArgs&, const std::string&)> _parser)
+            std::function<void (const cdif::Container&, TArgs&, const std::string&)> _parser,
+            bool _freestanding)
             :
                 name(_name),
                 switches(_switches),
                 description(_description),
                 has_argument(_has_argument),
                 parser(_parser),
-                consumed(false)
+                consumed(false),
+                freestanding(_freestanding)
         {
         }
 
@@ -58,7 +61,7 @@ namespace ap {
         if (!arg.switches.empty())
             join(ss, arg.switches.begin(), arg.switches.end(), "|");
 
-        if (arg.has_argument)
+        if (arg.has_argument || !arg.is_optional())
             ss << " <" << arg.name << ">";
         return ss.str();
     }
