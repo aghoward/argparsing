@@ -61,7 +61,7 @@ namespace ap {
         if (!arg.switches.empty())
             join(ss, arg.switches.begin(), arg.switches.end(), "|");
 
-        if (arg.has_argument)
+        if (arg.has_argument || !arg.is_optional())
             ss << " <" << arg.name << ">";
         return ss.str();
     }
