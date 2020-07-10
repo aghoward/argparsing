@@ -5,6 +5,7 @@ namespace ap {
         UnknownArgument,
         MissingPositionalArgument,
         TooManyPositionalArguments,
-        MissingValueForArgument
+        MissingValueForArgument,
+        TooManyIndependentArguments
     };
 }

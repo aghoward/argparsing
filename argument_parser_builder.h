@@ -32,7 +32,8 @@ namespace ap {
                 bool hasArgument,
                 TMember TArgs::*member,
                 TMember defaultValue,
-                TFactory&& conversion_factory)
+                TFactory&& conversion_factory,
+                bool freestanding)
             -> std::enable_if_t<std::is_convertible_v<
                 decltype(std::declval<TFactory>()(std::declval<cdif::Container>())(std::declval<std::string>())),
                 TMember>>
@@ -52,7 +53,8 @@ namespace ap {
                             auto conversion = conversion_factory(ctx);
                             args.*member = input.empty() ? defaultValue : conversion(input);
                         }
-                    });
+                    },
+                    freestanding);
             }
 
 
@@ -69,7 +71,8 @@ namespace ap {
                 TMember defaultValue,
                 const std::vector<std::string>& switches,
                 const std::string& description,
-                TFactory&& conversion_factory)
+                TFactory&& conversion_factory,
+                bool freestanding = false)
             -> std::enable_if_t<std::is_convertible_v<
                 decltype(std::declval<TFactory>()(std::declval<cdif::Container>())(std::declval<std::string>())),
                 TMember>,
@@ -82,7 +85,8 @@ namespace ap {
                     !std::is_same_v<TMember, bool>,
                     member,
                     defaultValue,
-                    conversion_factory);
+                    conversion_factory,
+                    freestanding);
 
                 return *this;
             }
@@ -93,9 +97,10 @@ namespace ap {
                 TMember TArgs::*member,
                 TMember defaultValue,
                 const std::vector<std::string>& switches,
-                const std::string& description)
+                const std::string& description,
+                bool freestanding = false)
             {
-                return add_optional(name, member, defaultValue, switches, description, impl::default_conversion_factory<TMember>);
+                return add_optional(name, member, defaultValue, switches, description, impl::default_conversion_factory<TMember>, freestanding);
             }
 
             template <typename TMember, typename TFactory>
@@ -117,7 +122,8 @@ namespace ap {
                     false,
                     member,
                     defaultValue,
-                    conversion_factory);
+                    conversion_factory,
+                    false);
 
                 return *this;
             }

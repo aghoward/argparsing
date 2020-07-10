@@ -78,6 +78,26 @@ namespace ap {
                         arg.parser(m_container, args, ""s);
             }
 
+            std::optional<ParsingError> get_argument_cardinality_error() const {
+                auto consumed_freestanding_args = std::count_if(
+                    m_arguments.begin(),
+                    m_arguments.end(),
+                    [] (const auto& arg) {
+                        return arg.freestanding && arg.consumed;
+                    });
+                if (consumed_freestanding_args == 1)
+                    return {};
+                if (consumed_freestanding_args > 1)
+                    return ParsingError::TooManyIndependentArguments;
+
+                return std::all_of(
+                    m_arguments.begin(),
+                    m_arguments.end(),
+                    [] (const auto& arg) {
+                        return arg.is_optional() || arg.consumed;
+                    }) ? std::optional<ParsingError>{} : ParsingError::MissingPositionalArgument;
+            }
+
             either<TArgs, ParsingError> parse_args(TArgs& args, const char* argv[], int argc)
             {
                 for (auto i = 1; i < argc; i++)
@@ -100,15 +120,9 @@ namespace ap {
                         return error.value();
                 }
 
-                if (!std::all_of(
-                        m_arguments.begin(),
-                        m_arguments.end(),
-                        [] (const auto& pa) {
-                            if (!pa.is_optional())
-                                return pa.consumed;
-                            return true;
-                        }))
-                    return ParsingError::MissingPositionalArgument;
+                auto cardinality_error = get_argument_cardinality_error();
+                if (cardinality_error)
+                    return cardinality_error.value();
 
                 fill_default_values(args);
 
@@ -194,6 +208,8 @@ namespace ap {
                     return "Too many positional arguments provided"s;
                 if (error == ParsingError::MissingValueForArgument)
                     return "Argument missing required value"s;
+                if (error == ParsingError::TooManyIndependentArguments)
+                    return "Too many independent arguments provided"s;
 
                 return "Unknown error"s;
             }
