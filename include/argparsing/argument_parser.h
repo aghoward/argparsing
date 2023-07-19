@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "argument.h"
-#include "errors.h"
-#include "primitives_module.h"
+#include "argparsing/argument.h"
+#include "argparsing/errors.h"
+#include "argparsing/primitives_module.h"
 #include "cdif/cdif.h"
 #include "either/either.h"
 
